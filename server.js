@@ -1,30 +1,17 @@
 const express = require("express");
 const cors = require("cors");
-const path = require("path");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// 静态文件
 app.use(express.static(__dirname));
 
-/**
- * 关键修改 1：
- * 让 Express 可以直接托管前端静态文件（index.html / JS / CSS）
- */
-app.use(express.static(__dirname));
-
-/**
- * 关键修改 2：
- * 明确 "/" 返回 index.html（保证访问主页就是前端）
- */
-app.get("/", (req, res) => {
-    res.sendFile(path.join(__dirname, "index.html"));
-});
-
+// API
 const MAX_ITEMS = 5;
 
-// all 6 axis-aligned rotations of [l, w, h], deduped
 function getOrientations([l, w, h]) {
     const perms = [
         [l, w, h], [l, h, w],
@@ -77,7 +64,7 @@ function tryPlace([ex, ey, ez], cursor, boxL, boxW, boxH) {
 
 function packItems(box, items) {
     if (items.length > MAX_ITEMS) {
-        return { canFit: false, reason: `Too many items (max ${MAX_ITEMS})`, placements: [] };
+        return { canFit: false, reason: "Too many items", placements: [] };
     }
 
     const [boxL, boxW, boxH] = box.split(",").map(Number);
@@ -94,34 +81,27 @@ function packItems(box, items) {
 
     for (const obj of sortedItems) {
         const candidates = getOrientations(obj.dims)
-            .map(orientation => ({
-                orientation,
-                result: tryPlace(orientation, cursor, boxL, boxW, boxH)
-            }))
-            .filter(c => c.result !== null);
+            .map(o => ({ o, r: tryPlace(o, cursor, boxL, boxW, boxH) }))
+            .filter(c => c.r);
 
-        if (candidates.length === 0) {
-            return {
-                canFit: false,
-                reason: `Item (${obj.dims.join(",")}) does not fit in any orientation`,
-                placements
-            };
+        if (!candidates.length) {
+            return { canFit: false, placements };
         }
 
         candidates.sort((a, b) =>
-            a.result.wraps - b.result.wraps ||
-            a.orientation[2] - b.orientation[2]
+            a.r.wraps - b.r.wraps ||
+            a.o[2] - b.o[2]
         );
 
         const best = candidates[0];
 
         placements.push({
             item: obj.dims,
-            position: best.result.position,
-            rotation: best.orientation
+            position: best.r.position,
+            rotation: best.o
         });
 
-        cursor = best.result.next;
+        cursor = best.r.next;
     }
 
     return { canFit: true, placements };
@@ -132,15 +112,7 @@ app.post("/pack", (req, res) => {
     res.json(packItems(box, items));
 });
 
-/**
- * Render / 本地启动兼容
- */
-const PORT = process.env.PORT || 3000;
-
-if (require.main === module) {
-    app.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
-    });
-}
-
-module.exports = { getOrientations, tryPlace, packItems, MAX_ITEMS };
+const PORT = 3000;
+app.listen(PORT, () => {
+    console.log("Server running on port " + PORT);
+});
