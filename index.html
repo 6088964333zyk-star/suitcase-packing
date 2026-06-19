@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Suitcase Packing Tool</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        input, textarea { width: 300px; margin-bottom: 10px; }
+        button { padding: 8px 16px; }
+        pre { background: #f4f4f4; padding: 10px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+<h2>Suitcase Packing Tool</h2>
+
+<div>
+    <h3>Box (L,W,H)</h3>
+    <input id="box" placeholder="30,20,15" />
+</div>
+
+<div>
+    <h3>Items (each line: L,W,H)</h3>
+    <textarea id="items" rows="6" placeholder="10,10,10&#10;5,5,5"></textarea>
+</div>
+
+<button onclick="pack()">Pack</button>
+
+<pre id="result"></pre>
+
+<script>
+async function pack() {
+    const box = document.getElementById("box").value;
+
+    const items = document.getElementById("items").value
+        .split("\n")
+        .filter(Boolean)
+        .map(line => line.split(",").map(Number));
+
+    const res = await fetch("http://localhost:3000/pack", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ box, items })
+    });
+
+    const data = await res.json();
+
+    let output = "";
+
+    output += data.canFit ? "✓ CAN FIT\n\n" : "✗ CANNOT FIT\n\n";
+
+    output += "Placements:\n\n";
+
+    data.placements.forEach((p, i) => {
+        output += `Item ${i + 1}: (${p.item.join(", ")})\n`;
+        output += `Rotation: (${p.rotation.join(", ")})\n`;
+        output += `Position: (${p.position.join(", ")})\n\n`;
+    });
+
+    document.getElementById("result").innerText = output;
+}
+</script>
+
+</body>
+</html>
