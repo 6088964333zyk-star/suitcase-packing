@@ -1,18 +1,29 @@
 const express = require("express");
 const cors = require("cors");
+const path = require("path");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
+/**
+ * 关键修改 1：
+ * 让 Express 可以直接托管前端静态文件（index.html / JS / CSS）
+ */
+app.use(express.static(__dirname));
+
+/**
+ * 关键修改 2：
+ * 明确 "/" 返回 index.html（保证访问主页就是前端）
+ */
 app.get("/", (req, res) => {
-    res.send("Suitcase Packing Backend Running");
+    res.sendFile(path.join(__dirname, "index.html"));
 });
 
 const MAX_ITEMS = 5;
 
-// all 6 axis-aligned rotations of [l, w, h], deduped (cubes/equal dims collapse)
+// all 6 axis-aligned rotations of [l, w, h], deduped
 function getOrientations([l, w, h]) {
     const perms = [
         [l, w, h], [l, h, w],
@@ -28,10 +39,6 @@ function getOrientations([l, w, h]) {
     });
 }
 
-// shelf-packing rule: fill a row along x, stack rows along y into a layer,
-// stack layers along z. Returns null if the orientation can't be placed
-// at/after the current cursor, otherwise the chosen position, the resulting
-// cursor, and how many row/layer wraps it took (fewer wraps = tighter fit).
 function tryPlace([ex, ey, ez], cursor, boxL, boxW, boxH) {
     let { x, y, z, maxRowHeight, maxLayerHeight } = cursor;
     let wraps = 0;
@@ -42,7 +49,7 @@ function tryPlace([ex, ey, ez], cursor, boxL, boxW, boxH) {
         maxRowHeight = 0;
         wraps++;
     }
-    if (x + ex > boxL) return null; // wider than the box even on a fresh row
+    if (x + ex > boxL) return null;
 
     if (y + ey > boxW) {
         y = 0;
@@ -50,9 +57,9 @@ function tryPlace([ex, ey, ez], cursor, boxL, boxW, boxH) {
         maxLayerHeight = 0;
         wraps++;
     }
-    if (y + ey > boxW) return null; // deeper than the box even on a fresh layer
+    if (y + ey > boxW) return null;
 
-    if (z + ez > boxH) return null; // taller than the remaining box height
+    if (z + ez > boxH) return null;
 
     return {
         position: [x, y, z],
@@ -67,9 +74,6 @@ function tryPlace([ex, ey, ez], cursor, boxL, boxW, boxH) {
     };
 }
 
-// pure packing algorithm: box is "L,W,H", items is an array of [l,w,h].
-// returns { canFit, placements, reason? } — no Express/HTTP concerns here,
-// so it can be unit tested directly.
 function packItems(box, items) {
     if (items.length > MAX_ITEMS) {
         return { canFit: false, reason: `Too many items (max ${MAX_ITEMS})`, placements: [] };
@@ -77,7 +81,6 @@ function packItems(box, items) {
 
     const [boxL, boxW, boxH] = box.split(",").map(Number);
 
-    // largest volume first
     const sortedItems = items
         .map(item => ({
             dims: item,
@@ -89,9 +92,11 @@ function packItems(box, items) {
     const placements = [];
 
     for (const obj of sortedItems) {
-        // try every rotation at the current cursor, keep the ones that fit
         const candidates = getOrientations(obj.dims)
-            .map(orientation => ({ orientation, result: tryPlace(orientation, cursor, boxL, boxW, boxH) }))
+            .map(orientation => ({
+                orientation,
+                result: tryPlace(orientation, cursor, boxL, boxW, boxH)
+            }))
             .filter(c => c.result !== null);
 
         if (candidates.length === 0) {
@@ -102,12 +107,11 @@ function packItems(box, items) {
             };
         }
 
-        // best fit = fewest row/layer wraps, then the orientation that leaves
-        // the smallest vertical footprint for what comes next
         candidates.sort((a, b) =>
             a.result.wraps - b.result.wraps ||
             a.orientation[2] - b.orientation[2]
         );
+
         const best = candidates[0];
 
         placements.push({
@@ -127,10 +131,14 @@ app.post("/pack", (req, res) => {
     res.json(packItems(box, items));
 });
 
+/**
+ * Render / 本地启动兼容
+ */
+const PORT = process.env.PORT || 3000;
+
 if (require.main === module) {
-    const PORT = 3000;
     app.listen(PORT, () => {
-        console.log(`Server running on http://localhost:${PORT}`);
+        console.log(`Server running on port ${PORT}`);
     });
 }
 
