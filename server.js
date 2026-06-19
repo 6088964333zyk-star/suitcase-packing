@@ -7,7 +7,7 @@ app.use(cors());
 app.use(express.json());
 
 // 静态文件
-app.use(express.static(__dirname));
+app.use(express.static(process.cwd()));
 
 // API
 const MAX_ITEMS = 5;
